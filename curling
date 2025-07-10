@@ -1,0 +1,18 @@
+#!/bin/bash
+
+if [ $# -eq 0 ]; then
+  echo "Usage: curling [curl options]"
+  exit 1
+fi
+
+echo "curl $@"
+echo -e "NameLookup\t| Connect\t| AppConnect\t| Pretransfer\t| Redirect\t| StartTransfer\t| TotalTime\t| ResponseCode"
+echo "=============================================================================================================================="
+
+while true; do
+  http_response=$(curl -s -o /dev/null -w "%{time_namelookup}\t| %{time_connect}\t| %{time_appconnect}\t| %{time_pretransfer}\t| %{time_redirect}\t| %{time_starttransfer}\t| %{time_total}\t| %{http_code}\n" "$@")
+
+  echo "$http_response"
+
+  sleep 1
+done
