@@ -1,18 +1,105 @@
 #!/bin/bash
+#https://github.com/sn-ARL/curling
 
 if [ $# -eq 0 ]; then
-  echo "Usage: curling [curl options]"
-  exit 1
+        echo "Usage: curling [curl options]"
+        exit 1
 fi
 
 echo "curl $@"
-echo -e "NameLookup | Connect   | AppConnect | Pretransfer | Redirect | StartTransfer | TotalTime | ResponseCode"
-echo "===========|===========|============|=============|==========|===============|===========|============="
+printf '%-17s | %-10s | %-8s | %-9s | %-10s | %-8s | %-9s | %-8s | %-10s\n' "Date" "NameLookup" "Connect" "AppConnect" "Pretransfer" "Redirect" "StartTransfer" "TotalTime" "ResponseCode"
+echo "==================|============|==========|============|=============|==========|===============|===========|============="
+
+nameLookup=()
+connect=()
+appConnect=()
+pretransfer=()
+redirect=()
+startTransfer=()
+totalTime=()
+declare -A responseCodeCount=()
+
+stats() {
+        local arr=("$@")
+        local min=
+        local max=
+        local sum=0
+        local count=0
+
+        for val in "${arr[@]}"; do
+                if [[ $val =~ ^[0-9.]+$ ]]; then
+                        if [ -z "$min" ] || (( $(echo "$val < $min" | bc -l) )); then
+                                min=$val
+                        fi
+                        if [ -z "$max" ] || (( $(echo "$val > $max" | bc -l) )); then
+                                max=$val
+                        fi
+                        sum=$(echo "$sum + $val" | bc)
+                        ((count++))
+                fi
+        done
+
+        if [ $count -gt 0 ]; then
+                local avg=$(echo "scale=6; $sum / $count" | bc -l)
+                printf "%-8s | %-8f | %-8s" "$min" "$avg" "$max"
+        else
+                printf "%-8s | %-8s | %-8s" "-" "-" "-"
+        fi
+}
+
+cleanup() {
+        echo
+        echo "Summary statistics:"
+        printf '%-14s | %-8s | %-8s | %-8s\n' "Parameter" "Min" "Average" "Max"
+        echo "===============|==========|==========|========="
+        printf '%-14s | ' "NameLookup"
+        stats "${nameLookup[@]}"
+        echo
+        printf '%-14s | ' "Connect"
+        stats "${connect[@]}"
+        echo
+        printf '%-14s | ' "AppConnect"
+        stats "${appConnect[@]}"
+        echo
+        printf '%-14s | ' "Pretransfer"
+        stats "${pretransfer[@]}"
+        echo
+        printf '%-14s | ' "Redirect"
+        stats "${redirect[@]}"
+        echo
+        printf '%-14s | ' "StartTransfer"
+        stats "${startTransfer[@]}"
+        echo
+        printf '%-14s | ' "TotalTime"
+        stats "${totalTime[@]}"
+        echo
+
+        echo "ResponseCode counts:"
+        for code in "${!responseCodeCount[@]}"; do
+                echo "  Code $code: ${responseCodeCount[$code]}"
+        done
+        exit 0
+}
+
+trap cleanup SIGINT
 
 while true; do
-  http_response=$(curl -s -o /dev/null -w "%{time_namelookup}   | %{time_connect}  | %{time_appconnect}   | %{time_pretransfer}    | %{time_redirect} | %{time_starttransfer}      | %{time_total}  | %{http_code}\n" "$@")
+        IFS='|' read -r nl c ac pt rd st tt rc < <(curl -s -o /dev/null -w "%{time_namelookup}|%{time_connect}|%{time_appconnect}|%{time_pretransfer}|%{time_redirect}|%{time_starttransfer}|%{time_total}|%{http_code}" "$@")
 
-  echo "$http_response"
+        ((responseCodeCount["$rc"]++))
 
-  sleep 1
+        if [ "$rc" != "000" ]; then
+                nameLookup+=("$(echo $nl | xargs)")
+                connect+=("$(echo $c | xargs)")
+                appConnect+=("$(echo $ac | xargs)")
+                pretransfer+=("$(echo $pt | xargs)")
+                redirect+=("$(echo $rd | xargs)")
+                startTransfer+=("$(echo $st | xargs)")
+                totalTime+=("$(echo $tt | xargs)")
+        fi
+
+        printf '%-17s | %-10s | %-8s | %-10s | %-11s | %-8s | %-13s | %-9s | %-10s\n' \
+                "$(date +"%D %H:%M:%S")" "$(echo $nl | xargs)" "$(echo $c | xargs)" "$(echo $ac | xargs)" "$(echo $pt | xargs)" "$(echo $rd | xargs)" "$(echo $st | xargs)" "$(echo $tt | xargs)" "$rc"
+
+        sleep 1
 done
